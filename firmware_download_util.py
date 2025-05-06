@@ -40,34 +40,40 @@ def update_progress(progress_label, progress_var, error_var, total_time):
         else:
             progress_var[0] = 100  # 确保进度达到100%
 
-    if error_var[0] == 1:
+    if error_var[0] == 2:
         progress_label['fg'] = 'red'
         progress_label['text'] = "下载失败，请检查固件文件类型是否准确！"
     else:
         progress_label['fg'] = 'green'
         progress_label['text'] = "已下载成功，请复制地址烧录固件！"
 
-def download_firmware(firmware_code, project_name, type_select, log_widget, progress_label, local_path, progress_var, error_var):
+def download_firmware(firmware_code, project_name,  log_widget, progress_label, local_path, progress_var, error_var):
+
     try:
-        if type_select.get() == "定制":
-            firmware_url = fr"\\10.11.80.6\oss 固件仓库\定制\{firmware_code}.zip"
-        else:
-            firmware_url = fr"\\10.11.80.6\oss 固件仓库\标准\{firmware_code}.zip"
-
+        # 尝试从“定制”路径下载
+        firmware_url = os.path.join(r"\\10.11.80.6\oss 固件仓库\定制", f"{firmware_code}.zip")
         if not os.path.exists(firmware_url):
-            error_var[0] = 1  # 设置错误标志
-            raise FileNotFoundError(f"无法找到固件文件: {firmware_url}")
+            # 如果“定制”路径不存在，尝试从“标准”路径下载
+            firmware_url = os.path.join(r"\\10.11.80.6\oss 固件仓库\标准", f"{firmware_code}.zip")
+            if not os.path.exists(firmware_url):
+                # 如果两个路径都不存在，抛出错误
+                error_var[0] = 2
+                raise FileNotFoundError(f"无法找到固件文件: {firmware_code}.zip")
 
+        # 确保本地路径存在
         if not os.path.exists(local_path):
             os.makedirs(local_path)
 
+        # 下载文件
         destination = os.path.join(local_path, f"{firmware_code}.zip")
         shutil.copy(firmware_url, destination)
         print(f"固件已成功从 {firmware_url} 下载到 {destination}")
+
+        # 解压并删除源文件
         unzip_and_delete(destination, local_path, log_widget, progress_var)
     except FileNotFoundError as e:
-        error_var[0] = 1  # 设置错误标志
         messagebox.showerror("错误", str(e))
+
 
 def unzip_and_delete(zip_file, local_path, log_widget, progress_var):
     try:
@@ -77,6 +83,9 @@ def unzip_and_delete(zip_file, local_path, log_widget, progress_var):
 
         current_directory = local_path
         print(f"当前目录: {current_directory}")
+        # print("------------------------------")
+        print("▓▓▓▓▓▓▓▓▓▓▓▓▓▓")
+        print(f"....正在解压....请等待....")
 
         with zipfile.ZipFile(zip_file, 'r') as zip_ref:
             zip_ref.extractall(current_directory)
@@ -84,6 +93,8 @@ def unzip_and_delete(zip_file, local_path, log_widget, progress_var):
 
         os.remove(zip_file)
         print(f"已删除源文件 {zip_file}")
+        print("▓▓▓▓▓▓▓▓▓▓▓▓▓▓")
+        print(f"解压完成！\n请点击“复制已下载固件地址”烧录固件")
         progress_var[0] = 100  # 解压完成后设置进度为100%
     except Exception as e:
         messagebox.showerror("错误", str(e))
@@ -140,13 +151,13 @@ def create_folder_from_description(description_entry, base_path):
 
     # 拼接产品信息和附加信息（如果有的话）
     if additional_info:
-        product_info = f"-{product_info}-{additional_info}"
+        product_info = f"_{product_info}_{additional_info}"
 
     # 当前日期
     current_date = datetime.now().strftime('%Y-%m-%d')
 
     # 创建文件夹名称
-    folder_name = f"{current_date}-传海龙-{company_name}-{product_info}"
+    folder_name = f"{current_date}_传海龙_{company_name}_{product_info}"
     folder_path = os.path.join(base_path, folder_name)
     def copy_upfm(folder_path):
         if os.path.exists(folder_path):
@@ -169,8 +180,8 @@ def create_folder_from_description(description_entry, base_path):
 def create_ui():
     root = tk.Tk()
     root.title("固件下载工具")
-    root.geometry("550x500")
-    root.iconbitmap("dog.ico")
+    root.geometry("520x450")
+    root.iconbitmap("favicon.ico")
     # root.wm_iconbitmap("dog.ico")
 
     left_frame = tk.Frame(root)
@@ -210,13 +221,13 @@ def create_ui():
 
 
 
-    type_select = tk.StringVar(left_frame)
-    type_select.set("定制")  # 默认选择定制
-    type_label = tk.Label(left_frame, text="类型:")
-    type_label.pack(pady=5)
-    type_combobox = ttk.Combobox(left_frame, textvariable=type_select, values=["定制", "标准"])
-    type_combobox.pack(pady=5)
-    type_combobox.current(0)  # 默认选择定制
+    # type_select = tk.StringVar(left_frame)
+    # type_select.set("定制")  # 默认选择定制
+    # type_label = tk.Label(left_frame, text="类型:")
+    # type_label.pack(pady=5)
+    # type_combobox = ttk.Combobox(left_frame, textvariable=type_select, values=["定制", "标准"])
+    # type_combobox.pack(pady=5)
+    # type_combobox.current(0)  # 默认选择定制
 
     log_widget = tk.Text(right_frame, height=40, width=30)
     log_widget.pack(pady=10)
@@ -248,7 +259,8 @@ def create_ui():
         threading.Thread(target=update_progress, args=(progress_label, progress_var, error_var, total_time)).start()
 
         # 启动下载线程
-        threading.Thread(target=download_firmware, args=(firmware_code, project_name, type_select, log_widget, progress_label, local_path, progress_var, error_var)).start()
+        # threading.Thread(target=download_firmware, args=(firmware_code, project_name, type_select, log_widget, progress_label, local_path, progress_var, error_var)).start()
+        threading.Thread(target=download_firmware, args=(firmware_code, project_name, log_widget, progress_label, local_path, progress_var, error_var)).start()
 
     download_button = tk.Button(left_frame, text="一键下载", command=on_download_button_click)
     download_button.pack(pady=10)
@@ -256,7 +268,7 @@ def create_ui():
     def on_copy_path_button_click():
         copy_directory_path_to_clipboard(project_name_entry, folder_path_entry)
 
-    copy_path_button = tk.Button(left_frame, text="复制文件地址", command=on_copy_path_button_click)
+    copy_path_button = tk.Button(left_frame, text="复制已下载固件地址", command=on_copy_path_button_click)
     copy_path_button.pack(pady=5)
 
 
@@ -281,7 +293,7 @@ def create_ui():
     description_entry.bind('<FocusIn>', on_entry_click)
     description_entry.bind('<FocusOut>', on_focusout)
     description_entry.pack(pady=5)
-    create_folder_button = tk.Button(left_frame, text="新建文件夹",
+    create_folder_button = tk.Button(left_frame, text="新建测试报告文件夹",
                                      command=lambda: create_folder_from_description(description_entry,
                                                                                     "D:\\任务点\\非统一化\\"))
     create_folder_button.pack(pady=5)
